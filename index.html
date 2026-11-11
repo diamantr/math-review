@@ -199,6 +199,12 @@ button.tick:disabled{cursor:default}
 .qmark{color:var(--muted)}
 .dnote{color:var(--muted);margin:.8rem 0 0;font-size:.95rem}
 
+.frac{display:inline-flex;flex-direction:column;align-items:center;vertical-align:middle;font-size:.8em;line-height:1.15;margin:0 .12em}
+.frac>span:first-child{border-bottom:2px solid currentColor;padding:0 .15em}
+.opts.three{grid-template-columns:repeat(3,1fr)}
+.opts.three .opt{font-size:1.8rem;padding:.5rem}
+pre.vcol{display:inline-block;font-family:ui-monospace,"Courier New",monospace;font-size:1.25rem;line-height:1.35;margin:.4rem 0;padding:.5rem .9rem;background:var(--sunk);border-radius:10px;color:var(--ink)}
+.rules li b .frac{font-size:.85em}
 .pop{position:fixed;top:calc(env(safe-area-inset-top,0px) + 3.4rem);inset-inline-start:50%;transform:translateX(50%);z-index:20;
   font-family:"Secular One",Arial,sans-serif;font-size:1.4rem;color:var(--good);pointer-events:none;animation:pop .9s ease-out forwards}
 @keyframes pop{from{opacity:0;translate:0 10px}20%{opacity:1;translate:0 0}to{opacity:0;translate:0 -24px}}
@@ -509,6 +515,153 @@ function genX(){
 }
 
 /* =========================================================
+   שברים עשרוניים  (all values kept as integer thousandths)
+   ========================================================= */
+const F=(n,d)=>`<span class="frac"><span>${n}</span><span>${d}</span></span>`;
+const MX=(w,n,d)=>`${w}${F(n,d)}`;
+const D=th=>(th/1000).toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+const places=th=>(D(th).split('.')[1]||'').length;
+const parseDec=s=>{const t=String(s).trim().replace(/\s/g,'').replace(',','.');return /^(\d+\.?\d*|\.\d+)$/.test(t)?parseFloat(t):NaN};
+const fmtDec=x=>String(Number(x.toFixed(3)));
+function fracObj(n,d,w=0){
+  const part=n*1000/d,th=w*1000+part;let k=1;while((10**k)%d)k++;const m=10**k/d;
+  const html=w?MX(w,n,d):F(n,d);
+  const core=m===1?`${F(n,d)} = ${D(part)}`:`${F(n,d)} = ${F(n*m,10**k)} = ${D(part)}`;
+  return {html,th,exp:w?`${M(core)}, ולכן ${M(`${html} = ${D(th)}`)}`:M(core)};
+}
+const decObj=(th,str)=>({html:str||D(th),th,exp:''});
+const MUST=[[1,2],[1,4],[3,4],[1,5],[1,8]];
+const MUST_TIP={'1/2':'חצי שווה 0.5.','1/4':'רבע שווה 0.25, כמו רבע שקל = 25 אגורות.','3/4':`שלושה רבעים: ${M('3 × 0.25 = 0.75')}.`,'1/5':`${M(`${F(1,5)} = ${F(2,10)} = 0.2`)}.`,'1/8':`שמינית היא חצי של רבע: ${M('0.25 : 2 = 0.125')}.`};
+
+function genE1(){
+  const qs=[];
+  MUST.forEach(([n,d])=>{
+    const ans=D(n*1000/d),opts=new Set([ans]);
+    const mis=String(Number('0.'+n+d));if(mis!==ans)opts.add(mis);
+    shuffle(MUST.map(([a,b])=>D(a*1000/b))).forEach(x=>{if(opts.size<4)opts.add(x)});
+    qs.push({type:'choice',prompt:`<div class="expr">${Q(`${F(n,d)} = ?`)}</div><p class="sub">איזה מספר עשרוני שווה לשבר?</p>`,
+      options:shuffle([...opts].map(x=>({label:M(x),correct:x===ans}))),explain:`${M(`${F(n,d)} = ${ans}`)}. ${MUST_TIP[n+'/'+d]}`});
+  });
+  shuffle(MUST).slice(0,3).forEach(([n,d])=>{
+    const others=shuffle(MUST.filter(x=>x[0]!==n||x[1]!==d)).slice(0,3);
+    qs.push({type:'choice',prompt:`איזה שבר שווה ל-<b class="big">${D(n*1000/d)}</b>?`,
+      options:shuffle([[n,d],...others].map(([a,b])=>({label:M(F(a,b)),correct:a===n&&b===d}))),explain:`${M(`${D(n*1000/d)} = ${F(n,d)}`)}. ${MUST_TIP[n+'/'+d]}`});
+  });
+  shuffle([[2,5],[3,5],[4,5],[3,8],[5,8],[2,4]].filter(x=>x[0]!==2||x[1]!==4)).slice(0,2).forEach(([n,d])=>{
+    const one=1000/d,th=n*one;
+    qs.push({type:'input',prompt:`<div class="expr">${Q(`${F(n,d)} = ?`)}</div><p class="sub">היעזרו במה שאתם יודעים בעל פה</p>`,fields:[{dec:1,answer:th/1000}],
+      explain:`${M(`${F(1,d)} = ${D(one)}`)}, ולכן ${M(`${F(n,d)} = ${n} × ${D(one)} = ${D(th)}`)}.`});
+  });
+  return shuffle(qs);
+}
+
+function genE2(){
+  const board=[fracObj(2,25),fracObj(3,5),fracObj(6,20,2),fracObj(2,500),fracObj(7,4)];
+  const rnd=[
+    ()=>{const d=pick([4,5,8,20,25,50,100,250,500,1000]);return fracObj(randInt(1,d-1),d)},
+    ()=>{const d=pick([4,5,8,20,25,50,125,200]);return fracObj(randInt(1,d-1),d)},
+    ()=>{const d=pick([2,4,5,8]);let n;do{n=randInt(d+1,4*d)}while(n%d===0);return fracObj(n,d)},
+    ()=>{const d=pick([4,5,20,25,50]);return fracObj(randInt(1,d-1),d,randInt(1,5))},
+    ()=>{const d=pick([10,100,1000]);return fracObj(randInt(1,d-1),d,pick([0,0,randInt(1,9)]))},
+  ].map(f=>f());
+  return shuffle([...board,...rnd]).map(o=>({type:'input',prompt:`<div class="expr">${Q(`${o.html} = ?`)}</div><p class="sub">כתבו כמספר עשרוני</p>`,
+    fields:[{dec:1,answer:o.th/1000}],explain:o.exp+(o.html.includes('500')||o.html.includes('250')?' מרחיבים את המכנה ל-1000, כדי שאפשר יהיה לקרוא את השבר כאלפיות.':'')}));
+}
+
+function cmpQ(A,B){
+  const sym=A.th<B.th?'<':A.th>B.th?'>':'=';
+  const dp=Math.max(places(A.th),places(B.th));
+  const pa=(A.th/1000).toFixed(dp),pb=(B.th/1000).toFixed(dp);
+  const conv=[A,B].filter(x=>x.exp).map(x=>x.exp).join('<br>');
+  return {type:'choice',cls:'three',ltr:1,prompt:`<div class="expr">${Q(`${A.html} ? ${B.html}`)}</div><p class="sub">בחרו את הסימן המתאים</p>`,
+    options:['<','=','>'].map(s=>({label:s,correct:s===sym})),
+    explain:`${conv?conv+'<br>':''}משווים ספרה מול ספרה אחרי הנקודה: ${M(`${pa} ${sym} ${pb}`)}, ולכן ${M(`${A.html} ${sym} ${B.html}`)}.`};
+}
+function cmpPair(){
+  const r=Math.random();let A,B;
+  if(r<.4){
+    const d=pick([2,4,5,8,10,20,25,50,100,250]),n=randInt(1,d-1);A=fracObj(n,d);
+    const mode=pick(['eq','trap','near']);let th=A.th;
+    if(mode==='trap'){th=Math.round(Number('0.'+n+d)*1000);if(th===A.th||th>=1000||th<=0)th=A.th+pick([-1,1])*pick([10,50,100])}
+    else if(mode==='near')th=A.th+pick([-1,1])*pick([5,10,20,50,100]);
+    if(th<=0)th=A.th+50;B=decObj(th);
+  }else if(r<.7){
+    const w=pick([0,0,randInt(1,9)]),a=w*1000+randInt(1,8)*100;
+    if(Math.random()<.2){A=decObj(a);B=decObj(a,D(a)+'0')}
+    else{A=decObj(a);B=decObj(a+pick([-1,1])*randInt(1,9)*10)}
+  }else{
+    const w=randInt(1,5),[n,d]=pick([...MUST,[1,10],[3,10],[1,20],[2,5]]);A=fracObj(n,d,w);
+    B=Math.random()<.25?decObj(A.th):decObj(w*1000+randInt(1,9)*100);
+  }
+  return Math.random()<.5?[A,B]:[B,A];
+}
+function genE3(){
+  const board=[cmpQ(fracObj(8,50),decObj(160)),cmpQ(decObj(250),fracObj(1,250)),cmpQ(decObj(2400),fracObj(1,4,2))];
+  const rnd=[];for(let i=0;i<7;i++){const[A,B]=cmpPair();rnd.push(cmpQ(A,B))}
+  return shuffle([...board,...rnd]);
+}
+
+function betweenQ(A,B){
+  const lo=A.th,hi=B.th;let step=10,c=[];
+  for(let v=lo+step-lo%step;v<hi;v+=step)if(v>lo)c.push(v);
+  if(c.length<2){c=[];for(let v=lo+1;v<hi;v++)c.push(v)}
+  const e1=c[Math.floor(c.length/3)],e2=c[Math.floor(2*c.length/3)];
+  const chk=v=>v*1000>lo+1e-9&&v*1000<hi-1e-9;
+  const conv=[A,B].filter(x=>x.exp).map(x=>x.exp).join('<br>');
+  const pad=hi-lo<=100&&places(lo)<=1&&places(hi)<=1?` טיפ: מוסיפים אפס בסוף, ${M(`${D(lo)} = ${(lo/1000).toFixed(2)}`)} ו-${M(`${D(hi)} = ${(hi/1000).toFixed(2)}`)}, ועכשיו רואים מספרים שביניהם.`:'';
+  return {type:'input',distinct:1,prompt:`<p class="story">כתבו <b>שני</b> מספרים עשרוניים שגדולים מ-${M(A.html)} וקטנים מ-${M(B.html)}:</p>`,
+    fields:[{dec:1,label:'מספר ראשון',check:chk},{dec:1,label:'מספר שני',check:chk}],
+    wrong:`צריך שני מספרים שונים בין ${D(lo)} ל-${D(hi)}. `,
+    explain:`${conv?conv+'<br>':''}כל מספר שגדול מ-${M(D(lo))} וקטן מ-${M(D(hi))} מתאים, למשל ${M(D(e1))} ו-${M(D(e2))}.${pad}`};
+}
+function genE4(){
+  const pairs=shuffle([
+    [fracObj(1,4),fracObj(1,2)],[fracObj(1,5),fracObj(1,4)],[fracObj(1,2),fracObj(3,4)],[fracObj(1,8),fracObj(1,5)],
+    [fracObj(3,5),fracObj(4,5)],[fracObj(2,5),fracObj(1,2)],[decObj(300),decObj(400)],[decObj(700),decObj(800)],[decObj(1200),fracObj(1,4,1)]]).slice(0,4);
+  return [betweenQ(fracObj(3,4),fracObj(9,10)),...pairs.map(([a,b])=>betweenQ(a,b))];
+}
+
+function genE5(){
+  const board=[
+    {e:`0.5 − ${F(3,10)}`,v:200,s:[`${F(3,10)} = 0.3`,'0.5 − 0.3 = 0.2']},
+    {e:`0.55 + ${MX(2,3,100)}`,v:2580,s:[`${MX(2,3,100)} = 2.03`,'0.55 + 2.03 = 2.58']},
+    {e:`${MX(3,1,2)} − 0.25`,v:3250,s:[`${MX(3,1,2)} = 3.5`,'3.5 − 0.25 = 3.25']},
+    {e:`${F(1,5)} × 4 + 0.5`,v:1300,s:[`${F(1,5)} = 0.2`,'0.2 × 4 = 0.8','0.8 + 0.5 = 1.3'],n:'קודם כפל, ואחר כך חיבור.'},
+  ];
+  const T=[
+    ()=>{const a=randInt(3,9),b=randInt(1,a-1);return {e:`0.${a} − ${F(b,10)}`,v:(a-b)*100,s:[`${F(b,10)} = 0.${b}`,`0.${a} − 0.${b} = ${D((a-b)*100)}`]}},
+    ()=>{const A=randInt(11,99)*10,W=randInt(1,5),c=randInt(1,9),B=W*1000+c*10;return {e:`${D(A)} + ${MX(W,c,100)}`,v:A+B,s:[`${MX(W,c,100)} = ${D(B)}`,`${D(A)} + ${D(B)} = ${D(A+B)}`]}},
+    ()=>{const W=randInt(2,6),[a,b]=pick([[1,2],[1,4],[3,4]]),B=W*1000+a*1000/b,s=pick([250,500,750,200,100]);return {e:`${MX(W,a,b)} − ${D(s)}`,v:B-s,s:[`${MX(W,a,b)} = ${D(B)}`,`${D(B)} − ${D(s)} = ${D(B-s)}`]}},
+    ()=>{const[a,b]=pick([[1,5],[1,4],[1,2],[1,10]]),k=randInt(2,9),add=pick([500,250,100,750]),f=a*1000/b,p=f*k;return {e:`${F(a,b)} × ${k} + ${D(add)}`,v:p+add,s:[`${F(a,b)} = ${D(f)}`,`${D(f)} × ${k} = ${D(p)}`,`${D(p)} + ${D(add)} = ${D(p+add)}`],n:'קודם כפל, ואחר כך חיבור.'}},
+  ];
+  return shuffle([...board,...T.map(f=>f())]).map(o=>({type:'input',prompt:`<div class="expr">${Q(o.e+' = ?')}</div><p class="sub">כתבו את התוצאה כמספר עשרוני</p>`,
+    fields:[{dec:1,answer:o.v/1000}],explain:`${o.n?o.n+' ':''}קודם הופכים את השבר למספר עשרוני:<ol class="steps">${o.s.map(x=>`<li>${M(x)}</li>`).join('')}</ol>`}));
+}
+
+function vcol(a,b,op,r){
+  const dp=Math.max(places(a),places(b),places(r));
+  const sa=(a/1000).toFixed(dp),sb=(b/1000).toFixed(dp),sr=(r/1000).toFixed(dp),w=Math.max(sa.length,sb.length,sr.length);
+  return `<pre class="vcol" dir="ltr">  ${sa.padStart(w)}\n${op} ${sb.padStart(w)}\n${'─'.repeat(w+2)}\n  ${sr.padStart(w)}</pre>`;
+}
+function addSubQ(a,b,op){
+  const r=op==='+'?a+b:a-b;
+  const pads=[a,b].some(x=>places(x)<Math.max(places(a),places(b)));
+  return {type:'input',prompt:`<div class="expr">${Q(`${D(a)} ${op==='+'?'+':'−'} ${D(b)} = ?`)}</div>`,fields:[{dec:1,answer:r/1000}],
+    explain:`מיישרים נקודה מתחת לנקודה${pads?' ומשלימים אפסים':''}:<br>${vcol(a,b,op==='+'?'+':'−',r)}`};
+}
+function genE6(){
+  const board=[[64080,8770,'-'],[52120,6900,'+'],[46480,8760,'+'],[6980,5020,'+'],[20000,17480,'-'],[204900,204840,'-']].map(([a,b,o])=>addSubQ(a,b,o));
+  const T=[
+    ()=>[randInt(1000,9999)*10,randInt(100,999)*pick([10,100]),'+'],
+    ()=>{const a=randInt(2000,9999)*10;return [a,randInt(100,Math.min(1999,a/10-1))*10,'-']},
+    ()=>{const W=randInt(10,50);return [W*1000,randInt(100,W*100-1)*10,'-']},
+    ()=>{const A=randInt(1000,9999)*100;return [A,A-randInt(1,9)*10,'-']},
+    ()=>{const a=randInt(101,999)*10;return [a,(Math.ceil(a/1000)+randInt(0,5))*1000-a,'+']},
+  ];
+  return [...shuffle(board),...shuffle(T).slice(0,4).map(f=>{const[a,b,o]=f();return addSubQ(a,b,o)})];
+}
+
+/* =========================================================
    topics & levels
    ========================================================= */
 const TOPICS=[
@@ -589,9 +742,40 @@ const TOPICS=[
    ${M('1560 : 15')}: מחלקים למספר קטן פי 2, ולכן התוצאה גדלה פי 2: 104.<br>
    ${M('1590 : 30')}: הוספנו עוד 30 אחד, ולכן התוצאה 53.<br>
    ${M('1570 : 30')}: הוספנו רק 10, ולכן 52 ושארית 10.</div>`}]},
- {id:'x',title:'מבחן חזרה',icon:'★',color:'#B97A06',test:1,levels:[
+{id:'e',title:'שברים עשרוניים',icon:'0.5',color:'#A93E74',levels:[
+  {id:'e1',title:'חובה לדעת בעל פה',desc:'חצי, רבע, שלושה רבעים, חמישית ושמינית.',gen:genE1,intro:`
+   <p>את השברים האלה צריך לזהות מיד, בלי לחשב:</p>
+   <ul class="rules">
+    <li><b>${F(1,2)}</b><span>${M('0.5')} (או ${M('0.50')})</span></li>
+    <li><b>${F(1,4)}</b><span>${M('0.25')}</span></li>
+    <li><b>${F(3,4)}</b><span>${M('0.75')}</span></li>
+    <li><b>${F(1,5)}</b><span>${M('0.2')} (או ${M('0.20')})</span></li>
+    <li><b>${F(1,8)}</b><span>${M('0.125')}</span></li>
+   </ul>
+   <div class="example">מהם אפשר לבנות עוד: ${M(`${F(3,5)} = 3 × 0.2 = 0.6`)}, ${M(`${F(3,8)} = 3 × 0.125 = 0.375`)}.</div>`},
+  {id:'e2',title:'משבר למספר עשרוני',desc:'מרחיבים את המכנה ל-10, 100 או 1000.',gen:genE2,intro:`
+   <p>הופכים את המכנה ל-10, 100 או 1000, ואז קוראים את השבר: עשיריות, מאיות או אלפיות.</p>
+   <div class="example">${M(`${F(2,25)} = ${F(8,100)} = 0.08`)}<br>${M(`${F(2,500)} = ${F(4,1000)} = 0.004`)}<br>${M(`${F(7,4)} = ${F(175,100)} = 1.75`)}</div>
+   <p>במספר מעורב השלם נשאר לפני הנקודה: ${M(`${MX(2,6,20)} = 2 + ${F(30,100)} = 2.3`)}</p>`},
+  {id:'e3',title:'גדול, קטן או שווה',desc:'משווים בין שברים למספרים עשרוניים.',gen:genE3,intro:`
+   <p>כדי להשוות, הופכים הכול למספרים עשרוניים ומשווים ספרה מול ספרה, משמאל לימין.</p>
+   <div class="example">${M(`${F(8,50)} = ${F(16,100)} = 0.16`)}, ולכן ${M(`${F(8,50)} = 0.16`)}.<br>${M(`${MX(2,1,4)} = 2.25`)}, ו-${M('2.40 > 2.25')}, ולכן ${M(`2.4 > ${MX(2,1,4)}`)}.</div>
+   <p>היזהרו: מספר ארוך יותר אחרי הנקודה הוא לא בהכרח גדול יותר. ${M('0.4 = 0.40')}, והוא גדול מ-${M('0.35')}.</p>`},
+  {id:'e4',title:'מספר בין שני מספרים',desc:'מוצאים מספרים עשרוניים בטווח.',gen:genE4,intro:`
+   <p>קודם הופכים את שני הגבולות למספרים עשרוניים, ואז מחפשים מספרים שביניהם.</p>
+   <div class="example">${M(`${F(3,4)} = 0.75`)} ו-${M(`${F(9,10)} = 0.9`)}.<br>מספרים מתאימים: ${M('0.8')}, ${M('0.85')}, ${M('0.76')} ועוד הרבה.</div>
+   <p>כשהגבולות קרובים, מוסיפים אפס: בין ${M('0.3 = 0.30')} ל-${M('0.4 = 0.40')} יש ${M('0.31')}, ${M('0.35')} ועוד.</p>`},
+  {id:'e5',title:'שברים ועשרוניים יחד',desc:'פותרים ורושמים את התוצאה כמספר עשרוני.',gen:genE5,intro:`
+   <p>כשתרגיל מערבב שבר ומספר עשרוני, קודם הופכים את השבר למספר עשרוני ואז מחשבים.</p>
+   <div class="example">${M(`0.5 − ${F(3,10)} = 0.5 − 0.3 = 0.2`)}<br>${M(`${F(1,5)} × 4 + 0.5 = 0.2 × 4 + 0.5 = 0.8 + 0.5 = 1.3`)}</div>
+   <p>ושומרים על סדר פעולות החשבון: כפל וחילוק לפני חיבור וחיסור.</p>`},
+  {id:'e6',title:'חיבור וחיסור עשרוניים',desc:'נקודה מתחת לנקודה.',gen:genE6,intro:`
+   <p>כותבים במאונך כך שהנקודה תהיה מתחת לנקודה, ומשלימים אפסים כדי שלשני המספרים יהיה אותו מספר ספרות אחרי הנקודה.</p>
+   <div class="example">${vcol(52120,6900,'+',59020)}</div>
+   <p>מספר שלם מקבל נקודה ואפסים: ${M('20 = 20.00')}, ולכן ${M('20 − 17.48 = 2.52')}.</p>`}]},
+  {id:'x',title:'מבחן חזרה',icon:'★',color:'#B97A06',test:1,levels:[
   {id:'x1',title:'מבחן חזרה מסכם',desc:'שאלות מכל הנושאים, בסדר של המבחן.',gen:genX,intro:`
-   <p>שאלות מכל ששת הנושאים: חזקות של 10, סדר פעולות, שאלות מילוליות, פירוק לגורמים, ציר המספרים וחילוק במאונך.</p>
+   <p>שאלות מששת הנושאים של המבחן הראשון: חזקות של 10, סדר פעולות, שאלות מילוליות, פירוק לגורמים, ציר המספרים וחילוק במאונך.</p>
    <p>בכל פעם השאלות מוגרלות מחדש, אז אפשר לעשות את המבחן כמה פעמים. נסו להגיע ל-3 כוכבים.</p>`}]},
 ];
 TOPICS.forEach(T=>T.levels.forEach((L,i)=>{L.topic=T;L.idx=i}));
@@ -667,7 +851,7 @@ function renderQ(){
   window.scrollTo(0,0);
 }
 function rChoice(q,el){
-  el.innerHTML=`<div class="prompt">${q.prompt}</div><div class="opts ${q.cls||''}">${q.options.map((o,i)=>`<button class="opt" data-i="${i}">${o.label}</button>`).join('')}</div>`;
+  el.innerHTML=`<div class="prompt">${q.prompt}</div><div class="opts ${q.cls||''}"${q.ltr?' dir="ltr"':''}>${q.options.map((o,i)=>`<button class="opt" data-i="${i}">${o.label}</button>`).join('')}</div>`;
   const bs=el.querySelectorAll('.opt');
   bs.forEach(b=>b.onclick=()=>{
     const o=q.options[+b.dataset.i];
@@ -676,21 +860,22 @@ function rChoice(q,el){
     award(o.correct);showFb(o.correct,q.explain);
   });
 }
-const inputForm=fields=>`<form class="ans">${fields.map(f=>`<label class="fld">${f.label?`<span>${f.label}</span>`:''}<input inputmode="numeric" autocomplete="off" aria-label="${f.label||'התשובה שלכם'}"></label>`).join('')}<button class="btn primary">בדיקה</button></form>`;
-function bindForm(el,fields,onDone){
+const inputForm=fields=>`<form class="ans">${fields.map(f=>`<label class="fld">${f.label?`<span>${f.label}</span>`:''}<input inputmode="${f.dec?'decimal':'numeric'}" autocomplete="off" aria-label="${f.label||'התשובה שלכם'}"></label>`).join('')}<button class="btn primary">בדיקה</button></form>`;
+function bindForm(el,fields,onDone,opt={}){
   const f=el.querySelector('form.ans'),ins=[...f.querySelectorAll('input')];ins[0].focus({preventScroll:true});
   f.onsubmit=e=>{e.preventDefault();
-    const vals=ins.map(x=>parseNum(x.value));const bad=vals.findIndex(v=>isNaN(v));if(bad>=0){ins[bad].focus();return}
-    const oks=vals.map((v,i)=>v===fields[i].answer);
+    const vals=ins.map((x,i)=>fields[i].dec?parseDec(x.value):parseNum(x.value));const bad=vals.findIndex(v=>isNaN(v));if(bad>=0){ins[bad].focus();return}
+    const oks=vals.map((v,i)=>{const fd=fields[i];return fd.check?fd.check(v):fd.dec?Math.abs(v-fd.answer)<1e-9:v===fd.answer});
+    if(opt.distinct&&vals.length>1&&Math.abs(vals[0]-vals[1])<1e-9)oks[1]=false;
     ins.forEach((x,i)=>{x.disabled=true;x.classList.add(oks[i]?'right':'wrong')});f.querySelector('button').disabled=true;
     onDone(oks.every(Boolean));
   };
 }
-const rightAns=fields=>`התשובה הנכונה: ${fields.map(f=>(f.label?f.label+' ':'')+'<b>'+fmt(f.answer)+'</b>').join(', ')}. `;
+const rightAns=fields=>`התשובה הנכונה: ${fields.map(f=>(f.label?f.label+' ':'')+'<b>'+(f.dec?fmtDec(f.answer):fmt(f.answer))+'</b>').join(', ')}. `;
 function rInput(q,el){
   const fields=q.fields||[{answer:q.answer}];
   el.innerHTML=`<div class="prompt">${q.prompt}</div>`+inputForm(fields);
-  bindForm(el,fields,ok=>{award(ok);showFb(ok,(ok?'':rightAns(fields))+q.explain)});
+  bindForm(el,fields,ok=>{award(ok);showFb(ok,(ok?'':(q.wrong||rightAns(fields)))+q.explain)},{distinct:q.distinct});
 }
 function rTree(q,el){
   let m=q.n,errs=0;const steps=[];
